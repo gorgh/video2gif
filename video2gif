@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+unalias -a
+
+# Check that FFmpeg is installed on your system
+if ! command -v ffmpeg &> /dev/null; then
+    echo "$(basename $0): error: FFmpeg is missing from your system"
+    exit 1
+fi
+
+# Manage CLI arguments
+if [[ $# == 0 ]]; then
+    echo "usage: $(basename $0) filename [filename ...]"
+    echo "$(basename $0): error: the following arguments are required: filename"
+    exit 1
+fi
+
+# Clean temporary files
+clean() {
+    tempfiles=(
+        "${palette_filename}"
+    )
+    rm -f "${tempfiles[@]}"
+}
+
+# Force cleaning if the program stops
+trap 'clean' ERR EXIT
+
+# Parse input files
+while [[ $# != 0 ]]; do
+    input_filename="$1"
+    if [[ ! -f "${input_filename}" ]]; then
+        echo "$(basename $0): error: no such file or directory: '${input_filename}'"
+        exit 1
+    fi
+
+    # Create a PNG palette
+    palette_filename="$(mktemp --suffix .png)"
+    ffmpeg -y -i "${input_filename}" -vf palettegen "${palette_filename}"
+
+    # Produce GIF using the PNG palette
+    output_filename="${input_filename%.*}.gif"
+    ffmpeg -y -i "${input_filename}" -i "${palette_filename}" -filter_complex paletteuse -r 10 "${output_filename}"
+    
+    # Clean and move to the next input file
+    clean
+    shift
+done
